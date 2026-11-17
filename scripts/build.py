@@ -103,6 +103,15 @@ def _lock_names(lock: Path) -> list[str]:
     return [m.group(1) for m in re.finditer(r"^([A-Za-z0-9_.\-]+)==", lock.read_text(), re.M)]
 
 
+def _tcl_tk_version() -> str:
+    try:
+        import tkinter
+
+        return tkinter.Tcl().eval("info patchlevel")
+    except Exception:  # noqa: BLE001 - only used as a label
+        return ""
+
+
 def write_third_party_licenses(target: Path) -> None:
     out = ["FileLocker bundles the following third-party software.", "=" * 78, ""]
     names = _lock_names(ROOT / "requirements.txt") + ["pyinstaller"]
@@ -133,13 +142,16 @@ def write_third_party_licenses(target: Path) -> None:
     base = Path(sys.base_prefix)
     internal = DIST / "_internal"
     runtime = (("Python", [base / "LICENSE.txt"]),
-               ("Tcl/Tk", [internal / "_tk_data" / "license.terms",
-                           internal / "_tcl_data" / "license.terms",
-                           *sorted((base / "tcl").glob("t*/license.terms"))]))
+               (f"Tcl/Tk {_tcl_tk_version()}".strip(),
+                [internal / "_tk_data" / "license.terms",
+                 internal / "_tcl_data" / "license.terms",
+                 *sorted((base / "tcl").glob("t*/license.terms")),
+                 ROOT / "licenses" / "TCL_TK_LICENSE.txt"]))
     for label, candidates in runtime:
         for p in candidates:
             if p.exists():
-                shown = p.relative_to(internal if p.is_relative_to(internal) else base)
+                origin = next((r for r in (internal, base, ROOT) if p.is_relative_to(r)), p.parent)
+                shown = p.relative_to(origin)
                 out += [f"{label} (bundled runtime)", f"----- {shown.as_posix()} -----",
                         p.read_text(encoding="utf-8", errors="replace").strip(), "", "=" * 78, ""]
                 break

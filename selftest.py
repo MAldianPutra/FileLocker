@@ -134,6 +134,23 @@ def _check_not_bundled() -> str:
     return f"not present in the exe: {', '.join(NOT_BUNDLED)}"
 
 
+def _check_gui_toolkit() -> str:
+    """The window toolkit (Tcl/Tk) must load from inside the exe. Release builds run on
+    GitHub's Python, whose Tcl/Tk can differ from a developer's, so prove it works."""
+    import tkinter as tk
+
+    root = tk.Tk()
+    try:
+        root.withdraw()
+        tcl, tk_ver = root.tk.eval("info patchlevel"), str(root.tk.call("set", "tk_patchLevel"))
+        frame = tk.Frame(root)
+        tk.Button(frame, text="test").pack()
+        root.update_idletasks()
+    finally:
+        root.destroy()
+    return f"Tcl {tcl} / Tk {tk_ver} loaded, a window was created and closed"
+
+
 def _check_encrypt(workdir: Path, password: str) -> str:
     import office_crypto
     import pdf_crypto
@@ -218,6 +235,7 @@ def run(report_path: str | None) -> int:
     checks = [
         ("Network kill switch", _check_network_blocked),
         ("Web/SSL modules not bundled", _check_not_bundled),
+        ("Window toolkit (Tcl/Tk)", _check_gui_toolkit),
         ("Encrypt / verify files", lambda: _check_encrypt(workdir, password)),
         ("Zip workflow", lambda: _check_zip(workdir, password)),
         ("Clean-up", lambda: _check_no_leftovers(workdir)),
