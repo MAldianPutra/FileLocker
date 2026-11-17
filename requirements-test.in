@@ -1,0 +1,2 @@
+# Test-only dependencies (not shipped).
+openpyxl==3.1.5

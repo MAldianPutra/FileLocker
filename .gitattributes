@@ -1,0 +1,6 @@
+# Normalise line endings; Windows batch files must keep CRLF to run reliably.
+* text=auto
+*.bat text eol=crlf
+*.py  text eol=lf
+*.md  text eol=lf
+*.yml text eol=lf

@@ -1,0 +1,5 @@
+# Runtime dependencies bundled into FileLocker.exe (all work fully offline).
+# Edit this file, then regenerate requirements.txt - see README, "Updating dependencies".
+msoffcrypto-tool==6.1.0
+pypdf==7.1.0
+cryptography==50.0.2

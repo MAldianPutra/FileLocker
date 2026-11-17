@@ -1,0 +1,89 @@
+# Builds an official release when a version tag (e.g. v1.0.0) is pushed.
+#
+# Produces a DRAFT GitHub release containing:
+#   FileLocker-<version>-win64.zip        the portable app
+#   SHA256SUMS.txt                        checksums (zip, exe, SBOM, self-test report)
+#   FileLocker-<version>-sbom.cdx.json    SBOM: every bundled third-party package
+#   FileLocker-<version>-selftest.txt     self-test report of the exact exe in the zip
+# plus a signed build provenance attestation (verify with `gh attestation verify`).
+# A maintainer reviews the draft and publishes it by hand.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write       # create the draft release
+  id-token: write       # sign the build provenance attestation
+  attestations: write   # store the attestation
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Check the tag matches version.py
+        run: |
+          v=$(python -c "import version; print(version.__version__)")
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match version.py ($v)"; exit 1
+          fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      - name: Install pinned, hash-verified dependencies
+        run: >
+          python -m pip install --require-hashes --no-deps
+          -r requirements.txt -r requirements-build.txt -r requirements-test.txt
+
+      - name: Tests
+        run: |
+          python tests/test_crypto.py
+          python tests/test_no_network.py
+
+      - name: Security scans
+        run: |
+          python -m pip install pip-audit==2.10.1 bandit==1.9.4 cyclonedx-bom==8.0.1
+          python -m pip_audit --strict --require-hashes --disable-pip -r requirements.txt
+          python -m bandit -r . -x ./tests,./scripts,./build,./dist -ll
+
+      - name: Build and self-test the exe
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          python scripts/build.py
+
+      - name: SBOM and checksums
+        run: |
+          cyclonedx-py requirements requirements.txt --of JSON --output-reproducible \
+            -o "release/FileLocker-${VERSION}-sbom.cdx.json"
+          cd release
+          sha256sum "FileLocker-${VERSION}-sbom.cdx.json" "FileLocker-${VERSION}-selftest.txt" >> SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Build provenance attestation
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            release/FileLocker-*-win64.zip
+            dist/FileLocker/FileLocker.exe
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --draft --verify-tag \
+            --title "FileLocker ${VERSION}" \
+            --notes "See CHANGELOG.md for changes and VERIFYING.md for how to verify this release (SHA-256 checksums, build attestation, SBOM, self-test)."

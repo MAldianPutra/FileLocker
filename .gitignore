@@ -1,0 +1,27 @@
+# Build output (releases are published as GitHub Release assets, never committed)
+build/
+dist/
+release/
+*.spec
+_build_info.py
+FileLocker-portable.zip
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Runtime files
+filelocker.log
+filelocker.log.*
+selftest*.txt
+report*.txt
+
+# Portable-Python fallback folder (see README, Option B)
+python/
+
+# Never commit real documents
+*.xlsx
+*.docx
+*.pdf
+*.zip
