@@ -126,18 +126,25 @@ def write_third_party_licenses(target: Path) -> None:
             out += ["Note: only PyInstaller's bootloader is included in FileLocker.exe. Its license",
                     "(GPL with a special exception) explicitly allows distributing programs built with it.", ""]
         out += ["=" * 78, ""]
-    # Tcl and Tk share one BSD-style license; Python's installer ships it in either folder.
-    runtime = (("Python", ["LICENSE.txt"]),
-               ("Tcl/Tk", ["tcl/tk8.6/license.terms", "tcl/tcl8.6/license.terms"]))
+    # Python's own license, and the Tcl/Tk license (Tcl and Tk share one BSD-style text).
+    # Prefer the Tcl/Tk license PyInstaller copied into the build - it belongs to the exact
+    # Tcl/Tk that ships - and fall back to Python's install folder (layouts differ between
+    # the python.org installer and GitHub's hosted Python).
+    base = Path(sys.base_prefix)
+    internal = DIST / "_internal"
+    runtime = (("Python", [base / "LICENSE.txt"]),
+               ("Tcl/Tk", [internal / "_tk_data" / "license.terms",
+                           internal / "_tcl_data" / "license.terms",
+                           *sorted((base / "tcl").glob("t*/license.terms"))]))
     for label, candidates in runtime:
-        for rel in candidates:
-            p = Path(sys.base_prefix) / rel
+        for p in candidates:
             if p.exists():
-                out += [f"{label} (bundled runtime)", f"----- {rel} -----",
+                shown = p.relative_to(internal if p.is_relative_to(internal) else base)
+                out += [f"{label} (bundled runtime)", f"----- {shown.as_posix()} -----",
                         p.read_text(encoding="utf-8", errors="replace").strip(), "", "=" * 78, ""]
                 break
         else:
-            sys.exit(f"License text for {label} not found under {sys.base_prefix} - not building.")
+            sys.exit(f"License text for {label} not found (looked in {internal} and {base}) - not building.")
     target.write_text("\n".join(out), encoding="utf-8")
 
 
